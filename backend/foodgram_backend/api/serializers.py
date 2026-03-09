@@ -31,12 +31,20 @@ class UserSerializer(DjoserUserSerializer):
     Сериализатор для отображения данных пользователей (только для чтения).
     Добавляет поле avatar.
     """
-    avatar = Base64ImageField(read_only=True)
+    avatar = serializers.SerializerMethodField(read_only=True)
     is_subscribed = serializers.SerializerMethodField(read_only=True)
 
     class Meta(DjoserUserSerializer.Meta):
         fields = DjoserUserSerializer.Meta.fields + ('avatar', 'is_subscribed',)
         read_only_fields = fields
+
+    def get_avatar(self, obj):
+        if not obj.avatar:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.avatar.url)
+        return obj.avatar.url
 
     def get_is_subscribed(self, obj):
         request = self.context.get('request')
@@ -77,7 +85,7 @@ class RecipeReadSerializer(serializers.ModelSerializer):
     ingredients = RecipeIngredientReadSerializer(many=True, read_only=True, source='recipe_ingredients')
     is_favorited = serializers.SerializerMethodField(read_only=True)
     is_in_shopping_cart = serializers.SerializerMethodField(read_only=True)
-    image = Base64ImageField(read_only=True)
+    image = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = Recipe
         fields = (
@@ -94,6 +102,13 @@ class RecipeReadSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger.exception(f'Ошибка в _get_user_recipe_relation: {e}')
             return False
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url
     def get_is_favorited(self, obj):
         return self._get_user_recipe_relation(obj, Favorite)
     def get_is_in_shopping_cart(self, obj):
@@ -148,11 +163,19 @@ class RecipeWriteSerializer(serializers.ModelSerializer):
 
 
 class RecipeShortSerializer(serializers.ModelSerializer):
-    image = Base64ImageField(read_only=True)
+    image = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = Recipe
         fields = ('id', 'name', 'image', 'cooking_time')
         read_only_fields = fields
+
+    def get_image(self, obj):
+        if not obj.image:
+            return None
+        request = self.context.get('request')
+        if request:
+            return request.build_absolute_uri(obj.image.url)
+        return obj.image.url
 
 
 class AuthorWithRecipesSerializer(UserSerializer):
@@ -160,11 +183,15 @@ class AuthorWithRecipesSerializer(UserSerializer):
     Сериализатор для отображения авторов, на которых подписан пользователь.
     Добавляет кол-во рецептов и их сокращенный список.
     """
-    recipes_count = serializers.IntegerField(source='recipes.count', read_only=True)
+    recipes_count = serializers.SerializerMethodField(read_only=True)
     recipes = serializers.SerializerMethodField(read_only=True)
     class Meta(UserSerializer.Meta):
         fields = UserSerializer.Meta.fields + ('recipes_count', 'recipes')
         read_only_fields = fields
+
+    def get_recipes_count(self, obj):
+        return obj.recipes.count()
+
     def get_recipes(self, obj):
         request = self.context.get('request')
         default_limit = 3
